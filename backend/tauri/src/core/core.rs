@@ -112,13 +112,21 @@ impl CoreManager {
             if enable_tun {
                 log::debug!(target: "app", "try to set system dns");
 
-                let tun_device_ip = Config::clash().clone().latest().get_tun_device_ip();
-                // 执行 networksetup -setdnsservers Wi-Fi $tun_device_ip
-                let (mut rx, _) = Command::new("networksetup")
-                    .args(["-setdnsservers", "Wi-Fi", tun_device_ip.as_str()])
-                    .spawn()?;
-                let event = rx.recv().await;
-                log::debug!(target: "app", "{event:?}");
+                match (|| async {
+                    let tun_device_ip = Config::clash().clone().latest().get_tun_device_ip();
+                    // 执行 networksetup -setdnsservers Wi-Fi $tun_device_ip
+                    Command::new("networksetup")
+                        .args(["-setdnsservers", "Wi-Fi", tun_device_ip.as_str()])
+                        .output()
+                })()
+                .await
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        // 修改这个值，免得stop出错
+                        log::error!(target: "app", "{err}");
+                    }
+                }
             }
         }
         #[cfg(target_os = "windows")]
